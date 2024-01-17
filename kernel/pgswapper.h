@@ -5,9 +5,6 @@
 #include "memlayout.h"
 #include "fs.h"
 
-
-
-
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
 
@@ -15,6 +12,7 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define ACCESS_BIT (0x1 << 6)
 #define VALID_BIT 0x1
 #define SWAPPED_BIT (0x1 << 9)
+#define THRASH_BIT (0x1 << 8)
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 #define PA2FRAME(pa) ( ( ((uint64) pa) - ((uint64)KERNBASE) ) >> 12)
@@ -22,6 +20,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PGSIZE 4096 // bytes per page
 #define PTE_FLAG_BITS 0xFFC00000000003FF
 #define LRU_CYCLE 3
+
+
 
 typedef struct LRU_entry {
     pte_t* pte;
@@ -52,4 +52,7 @@ int loadPage(pte_t* pte);
 void swapTest();
 
 
+
 #endif
+
+

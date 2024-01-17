@@ -1,5 +1,4 @@
 #include "types.h"
-#include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
@@ -702,3 +701,115 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+
+
+
+
+// THRASHING DETECTION MECHANISMS
+
+const static int THRASHING_CHECK_CYUCLE = 100;
+static int blockedProcessesCnt = 0;
+
+void updateThrashingBits() {
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *p = &proc[i];
+
+        //acquire(&p->lock);
+        if (p->state != RUNNABLE && p->state != RUNNING){
+            //release(&p->lock);
+            continue;
+        }
+        //release(&p->lock);
+
+        for (int va = 0; va < p->sz; va += PGSIZE) {
+            pte_t *pte = walk(p->pagetable, va, 0);
+            if (pte == 0) panic("\nVratio nullptr u updateProcWorkingSets\n");
+            if (*pte & ACCESS_BIT) *pte |= THRASH_BIT;
+        }
+    }
+}
+
+
+void unblockRandomProc(){
+    for(int i=0;i<NPROC;i++){
+       // acquire(&proc[i].lock);
+        if(proc[i].state == SUSPENDED){
+            proc[i].state = RUNNABLE;
+           // release(&proc[i].lock);
+            break;
+        }
+        //release(&proc[i].lock);
+    }
+}
+
+void detectThrashing() {
+    struct proc* biggestProc = 0;
+    uint64 biggestWorkingSet = 0;
+
+    uint64 totalWorkingSet = 0;
+    for (int i = 0; i < NPROC; i++) {
+
+        struct proc *p = &proc[i];
+        //acquire(&p->lock);
+
+        if (p->state != RUNNABLE && p->state != RUNNING) {
+            //release(&p->lock);
+            continue;
+        }
+        //release(&p->lock);
+
+        uint64 workingSet = 0;
+        for (int va = 0; va < p->sz; va += PGSIZE) {
+            pte_t *pte = walk(p->pagetable, va, 0);
+
+            if (pte == 0) panic("\nVratio nullptr u updateProcWorkingSets\n");
+
+            if(*pte & THRASH_BIT) workingSet++;
+            *pte &= ~THRASH_BIT;
+        }
+
+        if(workingSet > biggestWorkingSet){
+            biggestWorkingSet = workingSet;
+            biggestProc = p;
+        }
+        totalWorkingSet += workingSet;
+
+
+    }
+   // printf("\nUkupan working set je %d\n",totalWorkingSet);
+
+    if(biggestProc == 0 || biggestProc->state == RUNNING) {
+        return;
+    }
+
+    if(totalWorkingSet > FRAME_COUNT - 1000) {
+        printf("\nBlokiram jedan proces\n");
+      //  acquire(&biggestProc->lock);
+        biggestProc->state = SUSPENDED;   //block the biggest proccess
+      //  release(&biggestProc->lock);
+        blockedProcessesCnt++;
+    }
+    else if( (totalWorkingSet < FRAME_COUNT - 2000) && blockedProcessesCnt > 0){
+        printf("\nOdblokiravam jedan proces\n");
+        unblockRandomProc();
+        blockedProcessesCnt--;
+    }
+    printf("\nTotal working set je %d",totalWorkingSet);
+}
+
+
+void updateProcWorkingSets(){
+    static int tickCnt = 0;
+
+    updateThrashingBits();
+
+    tickCnt++;
+    if(tickCnt != THRASHING_CHECK_CYUCLE) return;
+    tickCnt = 0;
+
+    detectThrashing();
+}
+
+

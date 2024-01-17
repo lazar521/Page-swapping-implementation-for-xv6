@@ -172,7 +172,10 @@ void
 clockintr()
 {
   acquire(&tickslock);
+
+  updateProcWorkingSets();
   notifyLRU();
+
   ticks++;
   wakeup(&ticks);
   release(&tickslock);

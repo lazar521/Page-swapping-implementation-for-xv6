@@ -1,6 +1,7 @@
 #include "pgswapper.h"
 #include "defs.h"
 #include "spinlock.h"
+#include "proc.h"
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 #define PG2BLK(pg) (pg * (PGSIZE/BSIZE))
@@ -9,6 +10,7 @@ static int LRU_ticks = 0;
 static SWAP_INITIALIZED = 0;
 static LRU_entry LRU[FRAME_COUNT];
 static swapHeader swapfile;
+
 
 static int doPrint = 0;
 static int swapsDone = 0;
@@ -79,7 +81,6 @@ void unregisterPage(pte_t* pte){
     if(!SWAP_INITIALIZED) return;
     if(pte == 0) return;
 
-
     // if page is currently in swap
     if(*pte & SWAPPED_BIT){
         //extract swapBlock number from page table entry
@@ -93,9 +94,6 @@ void unregisterPage(pte_t* pte){
         LRU[frame].history = 0;
         LRU[frame].swappable = 0;
     }
-
-
-
 }
 
 
@@ -173,6 +171,8 @@ int swapPage(int frame){
     write_swap(PG2BLK(swapPage), FRAME2PA(frame),1);
 
     *pte &= ~VALID_BIT;          // clear VALID_BIT
+    *pte &= ~ACCESS_BIT;
+
     *pte |= SWAPPED_BIT;         // set SWAPPED_BIT to 1
     *pte &= PTE_FLAG_BITS;       // clear PTE address bits
     *pte |= swapPage << 10;     // insert swapBlock number instead
@@ -206,6 +206,7 @@ int loadPage(pte_t* pte){
     *pte |= PA2PTE(mem);         // set address of newly allocated memory
     *pte |= VALID_BIT;
 
+
     int frame = PA2FRAME(mem);
     LRU[frame].pte = pte;
     LRU[frame].history = 0x80;
@@ -213,18 +214,5 @@ int loadPage(pte_t* pte){
 
     sfence_vma();
     return 0;
-}
-
-
-
-void showInfo(){
-//    uint64 usrPgCnt = 0;
-//
-//    for(int i=0;i<FRAME_COUNT;i++){
-//        if(LRU[i].swappable) usrPgCnt++;
-//    }
-
-    printf("\nBroj swappovanih stranica je %d\n",swappedPagesCnt);
-   // printf("\nUkupno puta ubaceno u swap je ");
 }
 
