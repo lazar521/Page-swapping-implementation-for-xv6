@@ -716,12 +716,9 @@ void updateThrashingBits() {
     for (int i = 0; i < NPROC; i++) {
         struct proc *p = &proc[i];
 
-        //acquire(&p->lock);
         if (p->state != RUNNABLE && p->state != RUNNING){
-            //release(&p->lock);
             continue;
         }
-        //release(&p->lock);
 
         for (int va = 0; va < p->sz; va += PGSIZE) {
             pte_t *pte = walk(p->pagetable, va, 0);
@@ -752,13 +749,10 @@ void detectThrashing() {
     for (int i = 0; i < NPROC; i++) {
 
         struct proc *p = &proc[i];
-        //acquire(&p->lock);
 
         if (p->state != RUNNABLE && p->state != RUNNING) {
-            //release(&p->lock);
             continue;
         }
-        //release(&p->lock);
 
         uint64 workingSet = 0;
         for (int va = 0; va < p->sz; va += PGSIZE) {
@@ -770,7 +764,7 @@ void detectThrashing() {
             *pte &= ~THRASH_BIT;
         }
 
-        if(workingSet > biggestWorkingSet){
+        if(workingSet > biggestWorkingSet && p != initproc){
             biggestWorkingSet = workingSet;
             biggestProc = p;
         }
@@ -786,9 +780,7 @@ void detectThrashing() {
 
     if(totalWorkingSet > FRAME_COUNT - 1000) {
         printf("\nBlokiram jedan proces\n");
-      //  acquire(&biggestProc->lock);
         biggestProc->state = SUSPENDED;   //block the biggest proccess
-      //  release(&biggestProc->lock);
         blockedProcessesCnt++;
     }
     else if( (totalWorkingSet < FRAME_COUNT - 2000) && blockedProcessesCnt > 0){

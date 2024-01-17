@@ -15,6 +15,8 @@ static swapHeader swapfile;
 static int doPrint = 0;
 static int swapsDone = 0;
 
+static struct spinlock swapLock;
+
 // flush the TLB.
 static inline void
 sfence_vma()
@@ -25,6 +27,7 @@ sfence_vma()
 
 
 static int swappedPagesCnt = 0;
+
 
 void initSwap(){
     for(int i=0;i<FRAME_COUNT;i++){
@@ -81,6 +84,7 @@ void unregisterPage(pte_t* pte){
     if(!SWAP_INITIALIZED) return;
     if(pte == 0) return;
 
+
     // if page is currently in swap
     if(*pte & SWAPPED_BIT){
         //extract swapBlock number from page table entry
@@ -94,12 +98,15 @@ void unregisterPage(pte_t* pte){
         LRU[frame].history = 0;
         LRU[frame].swappable = 0;
     }
+
 }
 
 
 int getVictim(){
     int victim = -1;
-    int victim_history;
+    int victim_history=0xFF;
+
+    acquire(&swapLock);
 
     for(int i=0;i<FRAME_COUNT;i++){
         if(LRU[i].swappable == 0) continue;
@@ -111,13 +118,23 @@ int getVictim(){
         }
     }
 
+    if(victim != -1) LRU[victim].swappable = 0;
+
+    release(&swapLock);
+
     return victim;
 }
 
 
 int allocateSwapBlock(){
+    acquire(&swapLock);
+
     int block = swapfile.freeHead;
-    if(block == -1) return -1;
+    if(block == -1){
+        release(&swapLock);
+        return -1;
+    }
+
 
     swapfile.freeHead = swapfile.nextBlock[block];
     swapfile.nextBlock[block] = -1;
@@ -125,11 +142,16 @@ int allocateSwapBlock(){
     swappedPagesCnt++;
     //printf("\n====Alociram stranicu u swapu. Ukupno alocirano %d.",swappedPagesCnt);
 
+    release(&swapLock);
+
     return block;
 }
 
 int freeSwapBlock(int pageNo){
     if(pageNo < 0 || pageNo >= FRAME_COUNT) return -1;
+
+
+    acquire(&swapLock);
 
     swapfile.nextBlock[pageNo] = swapfile.freeHead;
     swapfile.freeHead = pageNo;
@@ -137,6 +159,7 @@ int freeSwapBlock(int pageNo){
     swappedPagesCnt--;
    //printf("\nOslobadjam stranicu u swapu. Broj alociranih je %d\n",swappedPagesCnt);
 
+    release(&swapLock);
     return 0;
 }
 
@@ -160,6 +183,7 @@ void read_swap(int swapBlock,uchar* pa, int busy_wait){
 int swapPage(int frame){
     if(!SWAP_INITIALIZED) return -1;
     pte_t* pte = LRU[frame].pte;
+
 
     if(pte == 0) panic("\nALO sta se desava\n");
     int swapPage = allocateSwapBlock();
@@ -195,7 +219,6 @@ int loadPage(pte_t* pte){
 
     // negate flag bits to extract swap block number
     int swapPage = (*pte & (~PTE_FLAG_BITS)) >> 10;
-
 
     read_swap(PG2BLK(swapPage),mem,1);
 
