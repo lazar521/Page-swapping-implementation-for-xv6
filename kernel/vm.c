@@ -120,9 +120,9 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
   if((*pte & PTE_U) == 0)
     return 0;
-  if((*pte & PTE_V) == 0) {
+  if((*pte & PTE_V) == 0) {     // Load the page if it is in swap
       if (*pte & SWAPPED_BIT) {
-          if (loadPage(pte) == -1) return 0;
+          if (swap_in(pte) == -1) return 0;
       } else return 0;
   }
   pa = PTE2PA(*pte);
@@ -325,7 +325,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: pte should exist");
     if( (*pte & PTE_V) == 0){
         if(*pte & SWAPPED_BIT){
-            if(loadPage(pte) == -1) panic("\nuvmcopy: could not load page from swap\n");
+            if(swap_in(pte) == -1) panic("\nuvmcopy: could not load page from swap\n");
         }
         else panic("uvmcopy: page not present");
     }

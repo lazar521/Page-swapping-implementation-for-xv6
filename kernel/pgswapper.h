@@ -22,7 +22,9 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define LRU_CYCLE 3
 
 
-
+// For every frame in RAM we keep track of the page table entry that is using it
+// Its reference history
+// And if it can be swapped or not (we don't swap kernel pages nor paging tables)
 typedef struct LRU_entry {
     pte_t* pte;
     uint8 history;
@@ -31,6 +33,8 @@ typedef struct LRU_entry {
 
 
 typedef struct swapHeader{
+    // We keep track of free pages in swap memory in a linked list
+    // Every entry has an index of the next free page
     uint64 nextBlock[FRAME_COUNT];
     uint64 freeHead;
 } swapHeader;
@@ -46,8 +50,8 @@ void showInfo();
 
 void notifyLRU();
 int getVictim();
-int swapPage(int frame);
-int loadPage(pte_t* pte);
+int swap_out(int frame);
+int swap_in(pte_t* pte);
 
 void swapTest();
 

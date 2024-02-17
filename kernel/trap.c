@@ -69,11 +69,12 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   }else if (r_scause() == 0xC || r_scause() == 0xD || r_scause() == 0xF) {
+      // if it's a page fault check if the page is in swap
       int va = r_stval();
     pte_t* pte = walk(myproc()->pagetable,va,0);
 
     if(pte == 0 || (*pte & SWAPPED_BIT) == 0) setkilled(p);
-    else if (loadPage(pte) == -1) setkilled(p);
+    else if (swap_in(pte) == -1) setkilled(p);
     }
   else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
@@ -173,7 +174,7 @@ clockintr()
 {
   acquire(&tickslock);
 
-  updateProcWorkingSets();
+//  updateProcWorkingSets();
   notifyLRU();
 
   ticks++;

@@ -58,13 +58,15 @@ void updateLRU(){
     uint8 refBit;
     for(int i=0;i<FRAME_COUNT;i++){
         if(LRU[i].swappable == 1 && LRU[i].pte != 0){
-            refBit = (*LRU[i].pte & ACCESS_BIT) << 1;
-            LRU[i].history = (LRU[i].history >> 1) | refBit;
+            refBit = (*LRU[i].pte & ACCESS_BIT) << 1;           // extract reference bit
+            LRU[i].history = (LRU[i].history >> 1) | refBit;    // update reference history
+            *LRU[i].pte &= (~ACCESS_BIT);                       // clear the access bit
         }
     }
 }
 
 
+// Register the page in our LRU table
 void registerPage(pte_t* pte,uint64 pa,int swappable){
     if(!SWAP_INITIALIZED) return;
     if(pa < KERNBASE || pa >= PHYSTOP) return;
@@ -74,16 +76,15 @@ void registerPage(pte_t* pte,uint64 pa,int swappable){
     LRU[frame].pte = pte;
     LRU[frame].history = 0x80;
     LRU[frame].swappable = swappable;
-
 }
 
 
 int freeSwapBlock(int blockNo);
 
+
 void unregisterPage(pte_t* pte){
     if(!SWAP_INITIALIZED) return;
     if(pte == 0) return;
-
 
     // if page is currently in swap
     if(*pte & SWAPPED_BIT){
@@ -111,6 +112,7 @@ int getVictim(){
     for(int i=0;i<FRAME_COUNT;i++){
         if(LRU[i].swappable == 0) continue;
 
+        // Find the frame with the lowest reference history
         if(victim == -1 || LRU[i].history < victim_history ){
             victim = i;
             victim_history = LRU[i].history;
@@ -125,7 +127,7 @@ int getVictim(){
     return victim;
 }
 
-
+// Returns the allocated page number in swap
 int allocateSwapBlock(){
     acquire(&swapLock);
 
@@ -135,18 +137,17 @@ int allocateSwapBlock(){
         return -1;
     }
 
-
     swapfile.freeHead = swapfile.nextBlock[block];
     swapfile.nextBlock[block] = -1;
 
     swappedPagesCnt++;
-    //printf("\n====Alociram stranicu u swapu. Ukupno alocirano %d.",swappedPagesCnt);
 
     release(&swapLock);
 
     return block;
 }
 
+// Frees the give swap page
 int freeSwapBlock(int pageNo){
     if(pageNo < 0 || pageNo >= FRAME_COUNT) return -1;
 
@@ -157,13 +158,13 @@ int freeSwapBlock(int pageNo){
     swapfile.freeHead = pageNo;
 
     swappedPagesCnt--;
-   //printf("\nOslobadjam stranicu u swapu. Broj alociranih je %d\n",swappedPagesCnt);
 
     release(&swapLock);
     return 0;
 }
 
 
+// The blocks in swap are of size BSIZE, but our pages in RAM are of size PGSIZE
 void write_swap(int swapBlock,uchar* pa, int busy_wait){
     for(int i=0;i<PGSIZE/BSIZE;i++){
         write_block(swapBlock, pa,busy_wait);
@@ -172,6 +173,7 @@ void write_swap(int swapBlock,uchar* pa, int busy_wait){
     }
 }
 
+// The blocks in swap are of size BSIZE, but our pages in RAM are of size PGSIZE
 void read_swap(int swapBlock,uchar* pa, int busy_wait){
     for(int i=0;i<PGSIZE/BSIZE;i++){
         read_block(swapBlock, pa,busy_wait);
@@ -180,18 +182,17 @@ void read_swap(int swapBlock,uchar* pa, int busy_wait){
     }
 }
 
-int swapPage(int frame){
+int swap_out(int frame){
     if(!SWAP_INITIALIZED) return -1;
     pte_t* pte = LRU[frame].pte;
 
 
-    if(pte == 0) panic("\nALO sta se desava\n");
+    if(pte == 0) panic("\nswap_out: Invalid pte\n");
     int swapPage = allocateSwapBlock();
 
 
     if(swapPage == -1) return -1;
 
-   // printf("\nizbacujem stranicu broj %d",swapPage);
     write_swap(PG2BLK(swapPage), FRAME2PA(frame),1);
 
     *pte &= ~VALID_BIT;          // clear VALID_BIT
@@ -209,15 +210,15 @@ int swapPage(int frame){
     return 0;
 }
 
-int loadPage(pte_t* pte){
+int swap_in(pte_t* pte){
     if(!SWAP_INITIALIZED) return -1;
 
-    if(pte == 0) panic("\nSam ja lud ?\n");
+    if(pte == 0) panic("\nswap_in: Invalid pte\n");
 
     uint8* mem = kalloc();
     if(mem == 0) return -1;
 
-    // negate flag bits to extract swap block number
+    // Extract the swap block number where the swapped page is located
     int swapPage = (*pte & (~PTE_FLAG_BITS)) >> 10;
 
     read_swap(PG2BLK(swapPage),mem,1);
@@ -229,7 +230,7 @@ int loadPage(pte_t* pte){
     *pte |= PA2PTE(mem);         // set address of newly allocated memory
     *pte |= VALID_BIT;
 
-
+    // register the page again
     int frame = PA2FRAME(mem);
     LRU[frame].pte = pte;
     LRU[frame].history = 0x80;

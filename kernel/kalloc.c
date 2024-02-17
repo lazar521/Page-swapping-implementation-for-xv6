@@ -82,7 +82,7 @@ kalloc(void)
     if(!r){
         int frame = getVictim();
         if(frame == -1) printf("\nNo frame can be swapped\n");
-        else if (swapPage(frame) == -1) setkilled(myproc());
+        else if (swap_out(frame) == -1) setkilled(myproc());
         else r = (struct run*) FRAME2PA(frame);
     }
 
