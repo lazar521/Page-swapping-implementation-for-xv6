@@ -174,7 +174,6 @@ clockintr()
 {
   acquire(&tickslock);
 
-//  updateProcWorkingSets();
   notifyLRU();
 
   ticks++;
